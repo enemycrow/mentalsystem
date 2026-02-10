@@ -1,0 +1,15 @@
+RewriteEngine On
+
+# Handle Authorization header
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Route all requests to existing files/directories normally
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Block access to config and middleware files directly (optional security)
+RewriteRule ^config/ - [F,L]
+RewriteRule ^middleware/ - [F,L]
+RewriteRule ^schema\.sql$ - [F,L]
