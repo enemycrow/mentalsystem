@@ -8,6 +8,33 @@ interface ApiResponse<T = unknown> {
   ok: boolean;
 }
 
+type ErrorPayload =
+  | { error?: { code?: string; message?: string } }
+  | { error?: string }
+  | { message?: string }
+  | Record<string, unknown>;
+
+function extractErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === 'object') {
+    const payload = data as ErrorPayload;
+    if (
+      typeof payload.error === 'object' &&
+      payload.error !== null &&
+      'message' in payload.error &&
+      typeof payload.error.message === 'string'
+    ) {
+      return payload.error.message;
+    }
+    if (typeof payload.error === 'string') {
+      return payload.error;
+    }
+    if ('message' in payload && typeof payload.message === 'string') {
+      return payload.message;
+    }
+  }
+  return `Request failed with status ${status}`;
+}
+
 async function request<T = unknown>(
   method: string,
   path: string,
@@ -50,11 +77,7 @@ async function request<T = unknown>(
   }
 
   if (!res.ok) {
-    const errorMsg =
-      typeof data === 'object' && data !== null && 'message' in data
-        ? (data as { message: string }).message
-        : `Request failed with status ${res.status}`;
-    throw new Error(errorMsg);
+    throw new Error(extractErrorMessage(data, res.status));
   }
 
   return { data, status: res.status, ok: res.ok };
