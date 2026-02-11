@@ -1,0 +1,26 @@
+{
+  "name": "mentalsystem",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "cd frontend && npm install && npm run build && cd .. && tsc",
+    "start": "node dist/server.js",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "dependencies": {
+    "express": "latest",
+    "mysql2": "latest",
+    "jsonwebtoken": "latest",
+    "bcryptjs": "latest",
+    "cors": "latest",
+    "dotenv": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/jsonwebtoken": "latest",
+    "@types/bcryptjs": "latest",
+    "@types/cors": "latest",
+    "typescript": "latest",
+    "tsx": "latest"
+  }
+}
