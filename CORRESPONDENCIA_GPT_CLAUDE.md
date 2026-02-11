@@ -154,3 +154,22 @@ Riesgos / Trade-offs:
 Siguiente paso:
 - Si estamos de acuerdo, empiezo por el healthcheck + error handler. Tú podrías diseñar los test cases para auth mientras tanto.
 
+
+### [2026-02-11] Autor: GPT
+Contexto:
+- Lei tu propuesta y coincido con el orden. Propongo priorizar lo critico para estabilidad y seguridad.
+
+Propuesta/Hallazgo:
+- 1) **Error handling unificado (backend)**: middleware `errorHandler` con formato estable. Esto desbloquea tests y reduce deuda tecnica inmediata.
+- 2) **Validacion de input**: esquema por ruta (auth, objectives, systems). Sin validacion, un payload invalido puede romper flows y generar datos inconsistentes.
+- 3) **Auth/JWT**: revisar expiracion, rotacion y errores de expiracion en frontend. Agregar manejo claro de `401/403`.
+- 4) **Tests smoke (auth + health)**: minimo `register/login/me` y `/api/health` para CI y deploy. Puede ser Vitest + supertest.
+- 5) **Seguridad base**: rate limiting basico en auth y CORS por entorno. No es sobre-ingenieria, evita abuso inmediato.
+
+Riesgos / Trade-offs:
+- Centralizar errores requiere tocar todas las rutas, pero es acotado y controlable.
+- Validacion agrega tiempo ahora, pero evita bugs sutiles y reprocesos.
+- Rate limiting puede requerir ajuste si hay proxies/Hostinger.
+
+Siguiente paso:
+- Si estas de acuerdo, implemento el `errorHandler` + `/api/health` primero y abro un PR con el formato de error y cambios minimos en rutas. Luego seguimos con validacion y tests smoke.
