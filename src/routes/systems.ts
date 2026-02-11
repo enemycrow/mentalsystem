@@ -96,13 +96,11 @@ router.put('/', async (req: AuthRequest, res: Response) => {
 
     if (!objectiveId || objectiveId <= 0) {
       res.status(400).json({ error: 'objective_id is required' });
-      connection.release();
       return;
     }
 
     if (!trimmedPurpose) {
       res.status(400).json({ error: 'purpose is required' });
-      connection.release();
       return;
     }
 
@@ -116,13 +114,11 @@ router.put('/', async (req: AuthRequest, res: Response) => {
 
     if (!objective) {
       res.status(404).json({ error: 'Objective not found' });
-      connection.release();
       return;
     }
 
     if (Number(objective.user_id) !== userId) {
       res.status(401).json({ error: 'Unauthorized' });
-      connection.release();
       return;
     }
 
