@@ -5,7 +5,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "cd frontend && npm install && npm run build && cd .. && tsc",
     "start": "node dist/server.js",
-    "dev:frontend": "cd frontend && npm run dev"
+    "dev:frontend": "cd frontend && npm run dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "express": "latest",
@@ -20,7 +22,10 @@
     "@types/jsonwebtoken": "latest",
     "@types/bcryptjs": "latest",
     "@types/cors": "latest",
+    "@types/supertest": "latest",
     "typescript": "latest",
-    "tsx": "latest"
+    "tsx": "latest",
+    "supertest": "latest",
+    "vitest": "latest"
   }
 }
