@@ -27,9 +27,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/objectives', objectivesRoutes);
 app.use('/api/systems', systemsRoutes);
 
-// Centralized error handler
-app.use(errorHandler);
-
 // Serve frontend static files
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 app.use(express.static(frontendDist));
@@ -38,6 +35,9 @@ app.use(express.static(frontendDist));
 app.get('*', (_req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
+
+// Centralized error handler (must be last)
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

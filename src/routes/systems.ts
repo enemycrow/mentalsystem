@@ -81,9 +81,11 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
 
 // PUT / - Update system (delete old elements/interactions, recreate)
 router.put('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const connection = await pool.getConnection();
+  let connection: Awaited<ReturnType<typeof pool.getConnection>> | null = null;
+  let transactionStarted = false;
 
   try {
+    connection = await pool.getConnection();
     const userId = req.userId!;
     const { objective_id, purpose, elements: inputElements, interactions: inputInteractions } = req.body;
 
@@ -122,6 +124,7 @@ router.put('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
     const existingSystem = existingSysRows[0];
 
     await connection.beginTransaction();
+    transactionStarted = true;
 
     let systemId: number;
 
@@ -205,10 +208,18 @@ router.put('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
 
     res.json({ system: result });
   } catch (err) {
-    await connection.rollback();
+    if (connection && transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Ignore rollback errors to preserve original error
+      }
+    }
     next(err);
   } finally {
-    connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 });
 

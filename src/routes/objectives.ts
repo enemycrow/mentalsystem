@@ -32,9 +32,11 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
 
 // POST / - Create a new objective with reflection, system, elements, interactions
 router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const connection = await pool.getConnection();
+  let connection: Awaited<ReturnType<typeof pool.getConnection>> | null = null;
+  let transactionStarted = false;
 
   try {
+    connection = await pool.getConnection();
     const userId = req.userId!;
     const { title, description, reflection, system } = req.body;
 
@@ -46,6 +48,7 @@ router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => 
     }
 
     await connection.beginTransaction();
+    transactionStarted = true;
 
     // 1. Create objective
     const [objResult] = await connection.execute<ResultSetHeader>(
@@ -115,10 +118,18 @@ router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => 
       },
     });
   } catch (err) {
-    await connection.rollback();
+    if (connection && transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Ignore rollback errors to preserve original error
+      }
+    }
     next(err);
   } finally {
-    connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
