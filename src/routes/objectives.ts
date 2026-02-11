@@ -1,7 +1,8 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import pool from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { AppError } from '../middleware/errorHandler';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 const router = Router();
@@ -10,7 +11,7 @@ const router = Router();
 router.use(authenticate);
 
 // GET / - List all objectives for the authenticated user
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
 
@@ -25,13 +26,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     res.json({ objectives });
   } catch (err) {
-    console.error('List objectives error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // POST / - Create a new objective with reflection, system, elements, interactions
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   const connection = await pool.getConnection();
 
   try {
@@ -42,8 +42,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const trimmedDescription = (description || '').trim();
 
     if (!trimmedTitle) {
-      res.status(400).json({ error: 'Title is required' });
-      return;
+      throw new AppError(400, 'MISSING_TITLE', 'Title is required');
     }
 
     await connection.beginTransaction();
@@ -95,7 +94,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         const toIndex = Number(interaction.element_to_index ?? -1);
 
         if (elementIds[fromIndex] === undefined || elementIds[toIndex] === undefined) {
-          throw new Error('Invalid element index in interactions');
+          throw new AppError(400, 'INVALID_ELEMENT_INDEX', 'Invalid element index in interactions');
         }
 
         await connection.execute(
@@ -115,24 +114,22 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         status: 'active',
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     await connection.rollback();
-    console.error('Create objective error:', err);
-    res.status(400).json({ error: err.message || 'Failed to create objective' });
+    next(err);
   } finally {
     connection.release();
   }
 });
 
 // GET /:id - Get objective with reflection, system (elements + interactions)
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
     const objectiveId = Number(req.params.id);
 
     if (!objectiveId || objectiveId <= 0) {
-      res.status(400).json({ error: 'Objective id is required' });
-      return;
+      throw new AppError(400, 'INVALID_ID', 'Objective id is required');
     }
 
     // Fetch objective and verify ownership
@@ -144,13 +141,11 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     const objective = objRows[0];
 
     if (!objective) {
-      res.status(404).json({ error: 'Objective not found' });
-      return;
+      throw new AppError(404, 'NOT_FOUND', 'Objective not found');
     }
 
     if (Number(objective.user_id) !== userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(403, 'FORBIDDEN', 'You do not own this objective');
     }
 
     objective.id = Number(objective.id);
@@ -161,7 +156,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       'SELECT id, question_1, question_2, question_3, created_at FROM reflections WHERE objective_id = ?',
       [objectiveId]
     );
-    let reflection = refRows[0] || null;
+    const reflection = refRows[0] || null;
     if (reflection) {
       reflection.id = Number(reflection.id);
     }
@@ -171,7 +166,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       'SELECT id, purpose, created_at FROM systems WHERE objective_id = ?',
       [objectiveId]
     );
-    let system = sysRows[0] || null;
+    const system = sysRows[0] || null;
 
     if (system) {
       system.id = Number(system.id);
@@ -206,20 +201,18 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       system,
     });
   } catch (err) {
-    console.error('Show objective error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // PUT /:id - Update title/description/status
-router.put('/:id', async (req: AuthRequest, res: Response) => {
+router.put('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
     const objectiveId = Number(req.params.id);
 
     if (!objectiveId || objectiveId <= 0) {
-      res.status(400).json({ error: 'Objective id is required' });
-      return;
+      throw new AppError(400, 'INVALID_ID', 'Objective id is required');
     }
 
     // Verify ownership
@@ -231,13 +224,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const objective = objRows[0];
 
     if (!objective) {
-      res.status(404).json({ error: 'Objective not found' });
-      return;
+      throw new AppError(404, 'NOT_FOUND', 'Objective not found');
     }
 
     if (Number(objective.user_id) !== userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(403, 'FORBIDDEN', 'You do not own this objective');
     }
 
     // Build dynamic update
@@ -247,8 +238,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (req.body.title !== undefined) {
       const trimmedTitle = (req.body.title || '').trim();
       if (!trimmedTitle) {
-        res.status(400).json({ error: 'Title cannot be empty' });
-        return;
+        throw new AppError(400, 'EMPTY_TITLE', 'Title cannot be empty');
       }
       fields.push('title = ?');
       params.push(trimmedTitle);
@@ -262,16 +252,14 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (req.body.status !== undefined) {
       const allowed = ['active', 'completed', 'archived'];
       if (!allowed.includes(req.body.status)) {
-        res.status(400).json({ error: 'Status must be one of: active, completed, archived' });
-        return;
+        throw new AppError(400, 'INVALID_STATUS', 'Status must be one of: active, completed, archived');
       }
       fields.push('status = ?');
       params.push(req.body.status);
     }
 
     if (fields.length === 0) {
-      res.status(400).json({ error: 'No fields to update' });
-      return;
+      throw new AppError(400, 'NO_FIELDS', 'No fields to update');
     }
 
     params.push(objectiveId);
@@ -288,20 +276,18 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
     res.json({ objective: updated });
   } catch (err) {
-    console.error('Update objective error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // DELETE /:id - Delete objective
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
     const objectiveId = Number(req.params.id);
 
     if (!objectiveId || objectiveId <= 0) {
-      res.status(400).json({ error: 'Objective id is required' });
-      return;
+      throw new AppError(400, 'INVALID_ID', 'Objective id is required');
     }
 
     // Verify ownership
@@ -313,21 +299,18 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const objective = objRows[0];
 
     if (!objective) {
-      res.status(404).json({ error: 'Objective not found' });
-      return;
+      throw new AppError(404, 'NOT_FOUND', 'Objective not found');
     }
 
     if (Number(objective.user_id) !== userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(403, 'FORBIDDEN', 'You do not own this objective');
     }
 
     await pool.execute('DELETE FROM objectives WHERE id = ?', [objectiveId]);
 
     res.json({ message: 'Objective deleted successfully' });
   } catch (err) {
-    console.error('Delete objective error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 

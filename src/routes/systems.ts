@@ -1,7 +1,8 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import pool from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { AppError } from '../middleware/errorHandler';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 const router = Router();
@@ -10,14 +11,13 @@ const router = Router();
 router.use(authenticate);
 
 // GET / - Get system by objective_id query param
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
     const objectiveId = Number(req.query.objective_id || 0);
 
     if (!objectiveId || objectiveId <= 0) {
-      res.status(400).json({ error: 'objective_id is required' });
-      return;
+      throw new AppError(400, 'MISSING_OBJECTIVE_ID', 'objective_id is required');
     }
 
     // Verify ownership via objective
@@ -29,13 +29,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const objective = objRows[0];
 
     if (!objective) {
-      res.status(404).json({ error: 'Objective not found' });
-      return;
+      throw new AppError(404, 'NOT_FOUND', 'Objective not found');
     }
 
     if (Number(objective.user_id) !== userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(403, 'FORBIDDEN', 'You do not own this objective');
     }
 
     // Fetch system
@@ -47,8 +45,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const system = sysRows[0];
 
     if (!system) {
-      res.status(404).json({ error: 'System not found for this objective' });
-      return;
+      throw new AppError(404, 'SYSTEM_NOT_FOUND', 'System not found for this objective');
     }
 
     system.id = Number(system.id);
@@ -78,13 +75,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     res.json({ system });
   } catch (err) {
-    console.error('Get system error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // PUT / - Update system (delete old elements/interactions, recreate)
-router.put('/', async (req: AuthRequest, res: Response) => {
+router.put('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   const connection = await pool.getConnection();
 
   try {
@@ -95,13 +91,11 @@ router.put('/', async (req: AuthRequest, res: Response) => {
     const trimmedPurpose = (purpose || '').trim();
 
     if (!objectiveId || objectiveId <= 0) {
-      res.status(400).json({ error: 'objective_id is required' });
-      return;
+      throw new AppError(400, 'MISSING_OBJECTIVE_ID', 'objective_id is required');
     }
 
     if (!trimmedPurpose) {
-      res.status(400).json({ error: 'purpose is required' });
-      return;
+      throw new AppError(400, 'MISSING_PURPOSE', 'purpose is required');
     }
 
     // Verify ownership via objective
@@ -113,13 +107,11 @@ router.put('/', async (req: AuthRequest, res: Response) => {
     const objective = objRows[0];
 
     if (!objective) {
-      res.status(404).json({ error: 'Objective not found' });
-      return;
+      throw new AppError(404, 'NOT_FOUND', 'Objective not found');
     }
 
     if (Number(objective.user_id) !== userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
+      throw new AppError(403, 'FORBIDDEN', 'You do not own this objective');
     }
 
     // Find existing system
@@ -170,7 +162,7 @@ router.put('/', async (req: AuthRequest, res: Response) => {
       const toIndex = Number(interaction.element_to_index ?? -1);
 
       if (elementIds[fromIndex] === undefined || elementIds[toIndex] === undefined) {
-        throw new Error('Invalid element index in interactions');
+        throw new AppError(400, 'INVALID_ELEMENT_INDEX', 'Invalid element index in interactions');
       }
 
       await connection.execute(
@@ -212,10 +204,9 @@ router.put('/', async (req: AuthRequest, res: Response) => {
     result.interactions = resultInterRows;
 
     res.json({ system: result });
-  } catch (err: any) {
+  } catch (err) {
     await connection.rollback();
-    console.error('Update system error:', err);
-    res.status(400).json({ error: err.message || 'Failed to update system' });
+    next(err);
   } finally {
     connection.release();
   }
