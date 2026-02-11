@@ -8,6 +8,7 @@ import path from 'path';
 import authRoutes from './routes/auth';
 import objectivesRoutes from './routes/objectives';
 import systemsRoutes from './routes/systems';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,10 +17,18 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/objectives', objectivesRoutes);
 app.use('/api/systems', systemsRoutes);
+
+// Centralized error handler
+app.use(errorHandler);
 
 // Serve frontend static files
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');

@@ -1,14 +1,15 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../config/database';
 import { authenticate, generateToken } from '../middleware/auth';
 import { AuthRequest, User } from '../types';
+import { AppError } from '../middleware/errorHandler';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 const router = Router();
 
 // POST /register
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, email, password } = req.body;
 
@@ -17,34 +18,27 @@ router.post('/register', async (req: Request, res: Response) => {
     const pwd = password || '';
 
     if (!trimmedName || !trimmedEmail || !pwd) {
-      res.status(400).json({ error: 'Name, email, and password are required' });
-      return;
+      throw new AppError(400, 'MISSING_FIELDS', 'Name, email, and password are required');
     }
 
-    // Simple email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
-      res.status(400).json({ error: 'Invalid email format' });
-      return;
+      throw new AppError(400, 'INVALID_EMAIL', 'Invalid email format');
     }
 
     if (pwd.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters' });
-      return;
+      throw new AppError(400, 'WEAK_PASSWORD', 'Password must be at least 6 characters');
     }
 
-    // Check if email already exists
     const [existing] = await pool.execute<RowDataPacket[]>(
       'SELECT id FROM users WHERE email = ?',
       [trimmedEmail]
     );
 
     if (existing.length > 0) {
-      res.status(400).json({ error: 'Email already registered' });
-      return;
+      throw new AppError(400, 'EMAIL_EXISTS', 'Email already registered');
     }
 
-    // Create user
     const passwordHash = await bcrypt.hash(pwd, 10);
 
     const [result] = await pool.execute<ResultSetHeader>(
@@ -64,13 +58,12 @@ router.post('/register', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // POST /login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
 
@@ -78,8 +71,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const pwd = password || '';
 
     if (!trimmedEmail || !pwd) {
-      res.status(400).json({ error: 'Email and password are required' });
-      return;
+      throw new AppError(400, 'MISSING_FIELDS', 'Email and password are required');
     }
 
     const [rows] = await pool.execute<RowDataPacket[]>(
@@ -90,8 +82,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const user = rows[0] as User | undefined;
 
     if (!user || !(await bcrypt.compare(pwd, user.password_hash))) {
-      res.status(401).json({ error: 'Invalid email or password' });
-      return;
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
     const token = generateToken(user.id);
@@ -105,13 +96,12 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 
 // GET /me
-router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
+router.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
 
@@ -123,16 +113,14 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     const user = rows[0];
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
     user.id = Number(user.id);
 
     res.json({ user });
   } catch (err) {
-    console.error('Me error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    next(err);
   }
 });
 

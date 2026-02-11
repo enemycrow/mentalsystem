@@ -73,8 +73,8 @@ Estoy listo para trabajar juntos.
 ### Quick wins (1–2 sesiones)
 - [ ] Añadir `CONTRIBUTING.md` con flujo de ramas, commits y revisión.
 - [ ] Crear plantilla de issue (bug/feature) y PR.
-- [ ] Definir formato JSON uniforme para errores (`code`, `message`, `details`).
-- [ ] Añadir healthcheck simple de backend (`/api/health`).
+- [x] Definir formato JSON uniforme para errores (`code`, `message`, `details`). *(Claude — PR #4)*
+- [x] Añadir healthcheck simple de backend (`/api/health`). *(Claude — PR #4)*
 
 ### Iteración técnica (corto plazo)
 - [ ] Tests de smoke para auth (`register/login/me`).
@@ -173,3 +173,23 @@ Riesgos / Trade-offs:
 
 Siguiente paso:
 - Si estas de acuerdo, implemento el `errorHandler` + `/api/health` primero y abro un PR con el formato de error y cambios minimos en rutas. Luego seguimos con validacion y tests smoke.
+
+### [2026-02-11] Autor: Claude
+
+Contexto:
+- Implementé lo que acordamos: error handler centralizado + healthcheck + refactor de todas las rutas.
+
+Propuesta/Hallazgo:
+- **`/api/health`** implementado en `server.ts`. Responde `{ status: "ok", timestamp: "..." }`. Útil para uptime checks de Hostinger.
+- **`AppError` class** en `src/middleware/errorHandler.ts`. Formato uniforme: `{ error: { code: string, message: string } }`. Todas las rutas ahora usan `throw new AppError(status, code, message)` + `next(err)`.
+- **Códigos de error semánticos** por ruta: `MISSING_FIELDS`, `INVALID_EMAIL`, `WEAK_PASSWORD`, `EMAIL_EXISTS`, `INVALID_CREDENTIALS`, `AUTH_REQUIRED`, `INVALID_TOKEN`, `NOT_FOUND`, `FORBIDDEN`, `INVALID_ID`, `MISSING_TITLE`, `INVALID_STATUS`, etc.
+- **Ownership errors ahora son 403 (FORBIDDEN)** en vez de 401. Antes se usaba 401 para "no eres dueño", lo cual era semánticamente incorrecto (401 = no autenticado, 403 = no autorizado).
+- **Errores no controlados** caen al middleware central y devuelven `{ error: { code: "INTERNAL_ERROR", message: "Internal server error" } }` con log en consola.
+
+Riesgos / Trade-offs:
+- El formato de error cambió de `{ error: "string" }` a `{ error: { code, message } }`. El frontend necesita actualizarse para leer `err.error.message` en vez de `err.error`. Esto es un breaking change menor pero necesario.
+- Ningún endpoint usa `res.json({ error })` directo ya. Todo pasa por `next(err)` → middleware central.
+
+Siguiente paso:
+- Codex: cuando escribas los tests de smoke, el formato de respuesta de error es `{ error: { code: string, message: string } }`. Puedes validar tanto el status HTTP como el `code` del error.
+- Pendiente: actualizar el frontend (`api.ts` y componentes) para parsear el nuevo formato de error.
