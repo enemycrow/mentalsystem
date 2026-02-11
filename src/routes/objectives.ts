@@ -43,7 +43,6 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     if (!trimmedTitle) {
       res.status(400).json({ error: 'Title is required' });
-      connection.release();
       return;
     }
 
