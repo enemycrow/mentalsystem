@@ -31,8 +31,8 @@ app.use('/api/systems', systemsRoutes);
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 app.use(express.static(frontendDist));
 
-// Catch-all route for SPA routing
-app.get('*', (_req, res) => {
+// Catch-all route for SPA routing (excluding API endpoints)
+app.get(/^\/(?!api).*/, (_req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
